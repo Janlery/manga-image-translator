@@ -1,4 +1,5 @@
 import re
+import sys
 
 from ..config import TranslatorConfig
 from .config_gpt import ConfigGPT  # Import the `gpt_config` parsing parent class
@@ -138,7 +139,10 @@ class CustomOpenAiTranslator(ConfigGPT, CommonTranslator):
             
             # 打印发送给 API 的完整内容
             formatted_prompt = self._format_prompt_log(to_lang, prompt)
-            print(formatted_prompt)
+            try:
+                print(formatted_prompt)
+            except UnicodeEncodeError:
+                print(formatted_prompt.encode(sys.stdout.encoding, errors='replace').decode(sys.stdout.encoding))
             
             self.logger.debug('-- GPT Prompt --\n' + formatted_prompt)
 
@@ -227,7 +231,7 @@ class CustomOpenAiTranslator(ConfigGPT, CommonTranslator):
             
             # 打印翻译结果
             for i, t in enumerate(new_translations):
-                print(f"[CustomOpenAI] <|{len(translations) - len(new_translations) + i + 1}|> {t[:100]}{'...' if len(t) > 100 else ''}")
+                self.logger.info(f"[CustomOpenAI] <|{len(translations) - len(new_translations) + i + 1}|> {t[:100]}{'...' if len(t) > 100 else ''}")
 
         for t in translations:
             if "I'm sorry, but I can't assist with that request" in t:
@@ -235,9 +239,7 @@ class CustomOpenAiTranslator(ConfigGPT, CommonTranslator):
         self.logger.debug(translations)
         if self.token_count_last:
             self.logger.info(f'Used {self.token_count_last} tokens (Total: {self.token_count})')
-            print(f"[CustomOpenAI] Used {self.token_count_last} tokens (Total: {self.token_count})")
-        
-        print(f"[shared] Translation completed: {len(translations)} texts")
+        self.logger.info(f'Translation completed: {len(translations)} texts')
 
         return translations
 

@@ -52,9 +52,22 @@ export const BatchResultGallery: React.FC<BatchResultGalleryProps> = ({
           </span>
         </h3>
         <button
-          onClick={() => {
-            // 下载所有结果
-            window.open(`/api/results/download?session=${sessionFolder}`, '_blank');
+          onClick={async () => {
+            try {
+              const response = await fetch(`/api/results/download?session=${sessionFolder}`);
+              if (!response.ok) throw new Error('Download failed');
+              const blob = await response.blob();
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `translation-results-${sessionFolder}.zip`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+            } catch (e) {
+              console.error('Download failed:', e);
+            }
           }}
           className="px-3 py-1.5 bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center gap-1"
         >

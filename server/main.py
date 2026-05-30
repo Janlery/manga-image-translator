@@ -43,6 +43,7 @@ async def register_instance(instance: ExecutorInstance, req: Request, req_nonce:
     if req_nonce != nonce:
         raise HTTPException(401, detail="Invalid nonce")
     instance.ip = req.client.host
+    instance.nonce = nonce
     executor_instances.register(instance)
 
 def transform_to_image(ctx):
@@ -314,7 +315,7 @@ def start_translator_client_proc(host: str, port: int, nonce: str, params: Names
     base_path = os.path.dirname(os.path.abspath(__file__))
     parent = os.path.dirname(base_path)
     proc = subprocess.Popen(cmds, cwd=parent)
-    executor_instances.register(ExecutorInstance(ip=host, port=port))
+    executor_instances.register(ExecutorInstance(ip=host, port=port, nonce=nonce))
 
     def handle_exit_signals(signal, frame):
         proc.terminate()
@@ -327,8 +328,8 @@ def start_translator_client_proc(host: str, port: int, nonce: str, params: Names
 
 def prepare(args):
     global nonce
-    if args.nonce is None:
-        nonce = os.getenv('MT_WEB_NONCE', generate_nonce())
+    if not args.nonce:
+        nonce = os.getenv('MT_WEB_NONCE') or generate_nonce()
     else:
         nonce = args.nonce
     if args.start_instance:
@@ -425,6 +426,41 @@ async def list_sessions():
         return {"sessions": sessions}
     except Exception as e:
         raise HTTPException(500, detail=str(e))
+
+@app.get("/results/download", tags=["api"])
+async def download_session_results(session: str):
+    """Download all result images for a session as a ZIP file"""
+    import zipfile
+    import tempfile
+    result_dir = "../result"
+    session_path = os.path.join(result_dir, session)
+
+    if not os.path.exists(session_path) or not os.path.isdir(session_path):
+        raise HTTPException(404, detail="Session not found")
+
+    # Collect all result images (including in batch subdirectories)
+    image_files = []
+    for root, dirs, files in os.walk(session_path):
+        for f in files:
+            if f.endswith('.png') or f.endswith('.jpg') or f.endswith('.jpeg'):
+                rel_path = os.path.relpath(os.path.join(root, f), session_path)
+                image_files.append((os.path.join(root, f), rel_path))
+
+    if not image_files:
+        raise HTTPException(404, detail="No result images found in session")
+
+    # Create ZIP in memory
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for full_path, rel_path in image_files:
+            zf.write(full_path, rel_path)
+
+    zip_buffer.seek(0)
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename=translation-results-{session}.zip"}
+    )
 
 @app.get("/results/list", tags=["api"])
 async def list_results():

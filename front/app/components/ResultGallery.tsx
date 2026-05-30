@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Icon } from '@iconify/react';
 import type { FinishedImage } from '@/types';
 
@@ -13,6 +13,28 @@ export const ResultGallery: React.FC<ResultGalleryProps> = ({
 }) => {
   const [selectedImage, setSelectedImage] = useState<FinishedImage | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Cache object URLs to prevent memory leaks
+  const urlCacheRef = useRef<Map<string, string>>(new Map());
+
+  const imageUrlMap = useMemo(() => {
+    const cache = urlCacheRef.current;
+    finishedImages.forEach((image) => {
+      if (!cache.has(image.id) && image.result instanceof Blob) {
+        cache.set(image.id, URL.createObjectURL(image.result));
+      }
+    });
+    return new Map(cache);
+  }, [finishedImages]);
+
+  // Revoke all cached URLs on unmount
+  useEffect(() => {
+    const cache = urlCacheRef.current;
+    return () => {
+      cache.forEach((url) => URL.revokeObjectURL(url));
+      cache.clear();
+    };
+  }, []);
 
   const openImageModal = (image: FinishedImage) => {
     setSelectedImage(image);
@@ -91,7 +113,7 @@ export const ResultGallery: React.FC<ResultGalleryProps> = ({
           >
             <div className="relative aspect-square overflow-hidden rounded-t-lg">
               <img
-                src={URL.createObjectURL(image.result)}
+                src={imageUrlMap.get(image.id)}
                 alt={`Translated: ${image.originalName}`}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
               />
@@ -154,7 +176,7 @@ export const ResultGallery: React.FC<ResultGalleryProps> = ({
 
             {/* Image */}
             <img
-              src={URL.createObjectURL(selectedImage.result)}
+              src={selectedImage ? imageUrlMap.get(selectedImage.id) : undefined}
               alt={`Translated: ${selectedImage.originalName}`}
               className="max-w-full max-h-full object-contain"
               onClick={(e) => e.stopPropagation()}

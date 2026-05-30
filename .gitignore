@@ -20,6 +20,9 @@ include
 share
 .DS_Store
 dev/
+external/
+config_*.json
+translate_config.json
 
 # Distribution / packaging
 .Python

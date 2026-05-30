@@ -1,5 +1,7 @@
 import asyncio
+import io
 import pickle
+import secrets
 from threading import Lock
 
 import uvicorn
@@ -9,6 +11,31 @@ from pydantic import BaseModel
 from starlette.responses import StreamingResponse
 
 from manga_translator import MangaTranslator
+
+SAFE_PICKLE_MODULES = frozenset({
+    'builtins',
+    'collections',
+    'numpy',
+    'numpy.core.multiarray',
+    'numpy.dtype',
+    'manga_translator',
+    'manga_translator.utils',
+    'manga_translator.utils.generic',
+    'manga_translator.config'
+})
+
+
+class RestrictedUnpickler(pickle.Unpickler):
+    def find_class(self, module: str, name: str):
+        if module in SAFE_PICKLE_MODULES or module.startswith('PIL.'):
+            return super().find_class(module, name)
+        raise pickle.UnpicklingError(
+            f"Deserialization of {module}.{name} is not allowed"
+        )
+
+
+def restricted_loads(data: bytes):
+    return RestrictedUnpickler(io.BytesIO(data)).load()
 
 class MethodCall(BaseModel):
     method_name: str
@@ -23,7 +50,12 @@ class MangaShare:
         self.manga = MangaTranslator(params)
         self.host = params.get('host', '127.0.0.1')
         self.port = int(params.get('port', '5003'))
-        self.nonce = params.get('nonce', None)
+        nonce = params.get('nonce', None)
+        if not nonce:
+            nonce = secrets.token_hex(16)
+        if nonce == "None":
+            nonce = None
+        self.nonce = nonce
 
         # each chunk has a structure like this status_code(int/1byte),len(int/4bytes),bytechunk
         # status codes are 0 for result, 1 for progress report, 2 for error
@@ -125,7 +157,7 @@ class MangaShare:
             self.check_nonce(request)
             self.check_lock()
             method = self.get_fn(method_name)
-            attr = pickle.loads(await request.body())
+            attr = restricted_loads(await request.body())
             try:
                 if asyncio.iscoroutinefunction(method):
                     result = await method(**attr)
@@ -143,7 +175,7 @@ class MangaShare:
             self.check_nonce(request)
             self.check_lock()
             method = self.get_fn(method_name)
-            attr = pickle.loads(await request.body())
+            attr = restricted_loads(await request.body())
 
             # 根据端点类型决定是否使用占位符优化
             config = attr.get('config')

@@ -180,7 +180,7 @@ async def get_batch_context_stream(req: Request, config: Config, images: list, b
                 })
                 
                 url = f"http://{instance.ip}:{instance.port}/execute/translate_batch_with_context"
-                headers = {'X-Nonce': os.getenv('MT_WEB_NONCE', '')}
+                headers = instance._nonce_headers()
                 
                 async with aiohttp.ClientSession() as session:
                     async with session.post(url, data=method_data, headers=headers) as response:

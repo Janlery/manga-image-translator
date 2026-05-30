@@ -5,6 +5,7 @@ from .dbnet_convnext import DBConvNextDetector
 from .ctd import ComicTextDetector
 from .craft import CRAFTDetector
 from .paddle_rust import PaddleDetector
+from .ysgyolo import YSGYoloDetector
 from .none import NoneDetector
 from .common import CommonDetector, OfflineDetector
 from ..config import Detector
@@ -15,6 +16,7 @@ DETECTORS = {
     Detector.ctd: ComicTextDetector,
     Detector.craft: CRAFTDetector,
     Detector.paddle: PaddleDetector,
+    Detector.ysgyolo: YSGYoloDetector,
     Detector.none: NoneDetector,
 }
 detector_cache = {}
@@ -37,6 +39,14 @@ async def dispatch(detector_key: Detector, image: np.ndarray, detect_size: int, 
     detector = get_detector(detector_key)
     if isinstance(detector, OfflineDetector):
         await detector.load(device)
+    else:
+        maybe_load = getattr(detector, "load", None)
+        if callable(maybe_load):
+            if hasattr(detector, "is_loaded"):
+                if not detector.is_loaded():
+                    await maybe_load(device)
+            else:
+                await maybe_load(device)
     return await detector.detect(image, detect_size, text_threshold, box_threshold, unclip_ratio, invert, gamma_correct, rotate, auto_rotate, verbose)
 
 async def unload(detector_key: Detector):

@@ -6,6 +6,7 @@ torch-summary
 einops
 scikit-image
 opencv-python
+ultralytics
 pyclipper
 shapely
 requests
@@ -45,7 +46,7 @@ aioshutil
 aiofiles
 arabic-reshaper
 pyhyphen
-langcodes
+langcodes[data]
 manga-ocr
 langdetect
 pydensecrf@https://github.com/lucasb-eyer/pydensecrf/archive/refs/heads/master.zip

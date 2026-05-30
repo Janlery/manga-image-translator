@@ -504,6 +504,7 @@ An example config file can be found in example/config-example.json
         "ctd",
         "craft",
         "paddle",
+        "ysgyolo",
         "none"
       ],
       "title": "Detector",

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
   type StatusKey,
   processingStatuses,
@@ -8,8 +8,6 @@ import {
   type QueuedImage,
   type TranslationSettings,
   type FinishedImage,
-  type TranslationBatch,
-  type BatchImage,
 } from "@/types";
 import { imageMimeTypes } from "@/config";
 import { OptionsPanel } from "@/components/OptionsPanel";
@@ -17,8 +15,6 @@ import { ImageHandlingArea } from "@/components/ImageHandlingArea";
 import { ImageQueue } from "@/components/ImageQueue";
 import { ResultGallery } from "@/components/ResultGallery";
 import { Header } from "@/components/Header";
-import { BatchManager } from "@/components/BatchManager";
-import { BatchResultGallery } from "@/components/BatchResultGallery";
 import { loadSettings, saveSettings, loadFinishedImages, addFinishedImage } from "@/utils/localStorage";
 
 export const App: React.FC = () => {
@@ -29,17 +25,12 @@ export const App: React.FC = () => {
   const [shouldTranslate, setShouldTranslate] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
 
-  // New state for improved UI features
-  const [queuedImages, setQueuedImages] = useState<QueuedImage[]>([]);
   const [finishedImages, setFinishedImages] = useState<FinishedImage[]>([]);
-  const [currentProcessingImage, setCurrentProcessingImage] = useState<QueuedImage | null>(null);
 
-  // 批次翻译模式状态
-  const [batchMode, setBatchMode] = useState(false);
-  const [batches, setBatches] = useState<TranslationBatch[]>([]);
-  const [isBatchProcessing, setIsBatchProcessing] = useState(false);
-  const [batchProgress, setBatchProgress] = useState<string>('');
-  const [sessionFolder, setSessionFolder] = useState<string>('');
+  // Translation Queue state
+  const [queuedImages, setQueuedImages] = useState<QueuedImage[]>([]);
+  const queueRef = useRef(queuedImages);
+  queueRef.current = queuedImages;
 
   // Translation Options State Hooks
   const [detectionResolution, setDetectionResolution] = useState("1536");
@@ -151,6 +142,136 @@ export const App: React.FC = () => {
     }
   }, [fileStatuses]);
 
+  // Queue processing — process images one by one from the queue
+  useEffect(() => {
+    const latestRef = {
+      config: buildTranslationConfig(),
+      settings: {
+        detectionResolution, textDetector, renderTextDirection,
+        translator, targetLanguage, inpaintingSize, customUnclipRatio,
+        customBoxThreshold, maskDilationOffset, inpainter,
+      } as TranslationSettings,
+    };
+
+    let cancelled = false;
+
+    const processQueue = async () => {
+      while (!cancelled) {
+        const current = queueRef.current;
+        const next = current.find(q => q.status === 'queued');
+        if (!next) break;
+
+        // Mark as processing
+        setQueuedImages(prev => prev.map(q =>
+          q.id === next.id ? { ...q, status: 'processing' as const } : q
+        ));
+
+        try {
+          const formData = new FormData();
+          formData.append("image", next.file);
+          formData.append("config", latestRef.config);
+
+          const response = await fetch(`/api/translate/with-form/image/stream`, {
+            method: "POST",
+            body: formData,
+          });
+
+          if (response.status !== 200) throw new Error("Upload failed");
+
+          const reader = response.body?.getReader();
+          if (!reader) throw new Error("No reader");
+
+          let buffer = new Uint8Array();
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done || !value) break;
+
+            const newBuffer = new Uint8Array(buffer.length + value.length);
+            newBuffer.set(buffer);
+            newBuffer.set(value, buffer.length);
+            buffer = newBuffer;
+
+            while (buffer.length >= 5) {
+              const dataSize = new DataView(buffer.buffer).getUint32(1, false);
+              const totalSize = 5 + dataSize;
+              if (buffer.length < totalSize) break;
+
+              const statusCode = buffer[0];
+              const data = buffer.slice(5, totalSize);
+              const decodedData = new TextDecoder("utf-8").decode(data);
+
+              if (statusCode === 0) {
+                // Result image — add to gallery
+                const resultBlob = new Blob([data], { type: "image/png" });
+                setQueuedImages(prev => prev.map(q =>
+                  q.id === next.id ? { ...q, status: 'finished' as const, result: resultBlob } : q
+                ));
+                const finishedImage: FinishedImage = {
+                  id: `${next.file.name}-${Date.now()}`,
+                  originalName: next.file.name,
+                  result: resultBlob,
+                  finishedAt: new Date(),
+                  settings: latestRef.settings,
+                };
+                setFinishedImages(prev => [finishedImage, ...prev]);
+              } else if (statusCode === 1) {
+                // Progress update
+                setQueuedImages(prev => prev.map(q =>
+                  q.id === next.id ? { ...q, status: 'processing' as const } : q
+                ));
+              } else if (statusCode === 2) {
+                // Error
+                setQueuedImages(prev => prev.map(q =>
+                  q.id === next.id ? { ...q, status: 'error' as const, error: decodedData } : q
+                ));
+              }
+
+              buffer = buffer.slice(totalSize);
+            }
+          }
+        } catch (err) {
+          setQueuedImages(prev => prev.map(q =>
+            q.id === next.id
+              ? { ...q, status: 'error' as const, error: err instanceof Error ? err.message : 'Unknown error' }
+              : q
+          ));
+        }
+      }
+    };
+
+    if (queuedImages.some(q => q.status === 'queued')) {
+      processQueue();
+    }
+
+    return () => { cancelled = true; };
+  }, [queuedImages]);
+
+  // Start the queue — used by ImageQueue's start button
+  const handleStartQueue = useCallback(() => {
+    const hasQueued = queueRef.current.some(q => q.status === 'queued');
+    if (hasQueued) {
+      // Force a re-render by touching state, which triggers the useEffect
+      setQueuedImages(prev => [...prev]);
+    }
+  }, []);
+
+  // Add images to queue
+  const addToQueue = (newFiles: File[]) => {
+    const newQueuedImages: QueuedImage[] = newFiles.map(file => ({
+      id: `${file.name}-${Date.now()}-${Math.random()}`,
+      file,
+      addedAt: new Date(),
+      status: 'queued' as const,
+    }));
+    setQueuedImages(prev => [...prev, ...newQueuedImages]);
+  };
+
+  // Remove image from queue (only queued items can be removed)
+  const removeFromQueue = (id: string) => {
+    setQueuedImages(prev => prev.filter(img => img.id !== id));
+  };
+
   // Event Handlers
   /** フォーム再セット */
   const clearForm = () => {
@@ -187,175 +308,9 @@ export const App: React.FC = () => {
     });
   };
 
-  // Queue management functions
-  const addToQueue = (newFiles: File[]) => {
-    const newQueuedImages: QueuedImage[] = newFiles.map(file => ({
-      id: `${file.name}-${Date.now()}-${Math.random()}`,
-      file,
-      addedAt: new Date(),
-      status: 'queued' as const,
-    }));
-    setQueuedImages(prev => [...prev, ...newQueuedImages]);
-  };
-
-  const removeFromQueue = (id: string) => {
-    setQueuedImages(prev => prev.filter(img => img.id !== id));
-  };
-
   const clearGallery = () => {
     setFinishedImages([]);
     localStorage.removeItem('manga-translator-finished-images');
-  };
-
-  // 批次翻译处理
-  const handleBatchTranslation = async () => {
-    if (batches.length === 0) return;
-    
-    setIsBatchProcessing(true);
-    const config = buildTranslationConfig();
-    
-    try {
-      for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
-        const batch = batches[batchIndex];
-        if (batch.images.length === 0) continue;
-        
-        // 跳过已完成的批次
-        if (batch.status === 'finished') {
-          console.log(`跳过已完成的批次: ${batch.name}`);
-          continue;
-        }
-        
-        setBatchProgress(`正在处理 ${batch.name} (${batchIndex + 1}/${batches.length})`);
-        
-        // 更新批次状态
-        setBatches(prev => prev.map(b => 
-          b.id === batch.id ? { ...b, status: 'processing' } : b
-        ));
-
-        // 按顺序处理批次内的图片，使用批次上下文翻译
-        const batchConfig = {
-          ...JSON.parse(config),
-          batch_context: {
-            batch_id: batch.id,
-            batch_name: batch.name,
-            batch_index: batchIndex + 1,
-            total_batches: batches.length,
-            total_images: batch.images.length,
-          }
-        };
-
-        // 发送批次翻译请求
-        const formData = new FormData();
-        const sortedImages = [...batch.images].sort((a, b) => a.order - b.order);
-        
-        for (const image of sortedImages) {
-          formData.append("images", image.file);
-        }
-        formData.append("config", JSON.stringify(batchConfig));
-        formData.append("batch_name", batch.name);
-
-        try {
-          const response = await fetch(`/api/translate/batch/context/stream`, {
-            method: "POST",
-            body: formData,
-          });
-
-          if (!response.ok) {
-            throw new Error(`批次翻译失败: ${response.statusText}`);
-          }
-
-          // 处理流式响应
-          const reader = response.body?.getReader();
-          if (reader) {
-            let buffer = new Uint8Array();
-            
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-              
-              // 合并缓冲区
-              const newBuffer = new Uint8Array(buffer.length + value.length);
-              newBuffer.set(buffer);
-              newBuffer.set(value, buffer.length);
-              buffer = newBuffer;
-
-              // 处理消息
-              while (buffer.length >= 5) {
-                const dataSize = new DataView(buffer.buffer).getUint32(1, false);
-                const totalSize = 5 + dataSize;
-                if (buffer.length < totalSize) break;
-
-                const statusCode = buffer[0];
-                const data = buffer.slice(5, totalSize);
-                const decodedData = new TextDecoder("utf-8").decode(data);
-
-                // 处理批次翻译状态更新
-                if (statusCode === 1) {
-                  // 进度更新
-                  setBatchProgress(`${batch.name}: ${decodedData}`);
-                  
-                  // 检查是否包含 session folder 信息
-                  if (decodedData.startsWith('session_folder:')) {
-                    const folder = decodedData.replace('session_folder:', '');
-                    setSessionFolder(folder);
-                  }
-                } else if (statusCode === 0) {
-                  // 单张图片完成，data 包含图片索引和结果
-                  try {
-                    const result = JSON.parse(decodedData);
-                    if (result.image_index !== undefined) {
-                      const imageId = sortedImages[result.image_index]?.id;
-                      if (imageId) {
-                        setBatches(prev => prev.map(b => {
-                          if (b.id !== batch.id) return b;
-                          return {
-                            ...b,
-                            images: b.images.map(img => 
-                              img.id === imageId 
-                                ? { ...img, status: 'finished' as const }
-                                : img
-                            )
-                          };
-                        }));
-                      }
-                    }
-                    // 检查是否包含 session folder
-                    if (result.session_folder) {
-                      setSessionFolder(result.session_folder);
-                    }
-                  } catch (e) {
-                    // 非JSON格式，可能是最终结果
-                  }
-                } else if (statusCode === 2) {
-                  // 错误
-                  console.error(`批次 ${batch.name} 错误:`, decodedData);
-                }
-
-                buffer = buffer.slice(totalSize);
-              }
-            }
-          }
-
-          // 批次完成
-          setBatches(prev => prev.map(b => 
-            b.id === batch.id ? { ...b, status: 'finished' } : b
-          ));
-
-        } catch (error) {
-          console.error(`批次 ${batch.name} 处理失败:`, error);
-          setBatches(prev => prev.map(b => 
-            b.id === batch.id ? { ...b, status: 'error' } : b
-          ));
-        }
-      }
-      
-      setBatchProgress('所有批次翻译完成！');
-    } catch (error) {
-      console.error('批次翻译失败:', error);
-      setBatchProgress('翻译失败，请重试');
-    } finally {
-      setIsBatchProcessing(false);
-    }
   };
 
   /**
@@ -625,90 +580,31 @@ export const App: React.FC = () => {
             setInpainter={setInpainter}
           />
 
-          {/* 模式切换 */}
+          {/* Main Image Handling Area */}
           <div className="border-t pt-6">
-            <div className="flex items-center gap-4 mb-4">
-              <span className="text-gray-700 font-medium">翻译模式:</span>
-              <button
-                onClick={() => setBatchMode(false)}
-                className={`px-4 py-2 rounded-lg transition-colors ${
-                  !batchMode 
-                    ? 'bg-blue-600 text-white' 
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                单图模式
-              </button>
-              <button
-                onClick={() => setBatchMode(true)}
-                className={`px-4 py-2 rounded-lg transition-colors ${
-                  batchMode 
-                    ? 'bg-blue-600 text-white' 
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                批次模式
-              </button>
-              {batchMode && (
-                <span className="text-sm text-gray-500">
-                  同一批次的图片会一起翻译，保持上下文关联
-                </span>
-              )}
-            </div>
-
+            <ImageHandlingArea
+              files={files}
+              fileStatuses={fileStatuses}
+              isProcessing={isProcessing}
+              isProcessingAllFinished={isProcessingAllFinished}
+              handleFileChange={handleFileChange}
+              handleDrop={handleDrop}
+              handleSubmit={handleSubmit}
+              clearForm={clearForm}
+              removeFile={removeFile}
+            />
           </div>
 
-          {/* 批次模式 */}
-          {batchMode ? (
-            <>
-              <div className="border-t pt-6">
-                <BatchManager
-                  batches={batches}
-                  onBatchesChange={setBatches}
-                  isProcessing={isBatchProcessing}
-                  onStartTranslation={handleBatchTranslation}
-                  batchProgress={batchProgress}
-                />
-              </div>
-              
-              {/* 批次翻译结果展示 */}
-              {batches.some(b => b.status === 'finished') && (
-                <div className="border-t pt-6">
-                  <BatchResultGallery
-                    batches={batches}
-                    sessionFolder={sessionFolder}
-                  />
-                </div>
-              )}
-            </>
-          ) : (
-            <>
-              {/* Image Queue Section */}
-              <div className="border-t pt-6">
-                <ImageQueue
-                  queuedImages={queuedImages}
-                  onRemoveFromQueue={removeFromQueue}
-                  onAddToQueue={addToQueue}
-                  isProcessing={isProcessing}
-                />
-              </div>
-
-              {/* Main Image Handling Area */}
-              <div className="border-t pt-6">
-                <ImageHandlingArea
-                  files={files}
-                  fileStatuses={fileStatuses}
-                  isProcessing={isProcessing}
-                  isProcessingAllFinished={isProcessingAllFinished}
-                  handleFileChange={handleFileChange}
-                  handleDrop={handleDrop}
-                  handleSubmit={handleSubmit}
-                  clearForm={clearForm}
-                  removeFile={removeFile}
-                />
-              </div>
-            </>
-          )}
+          {/* Translation Queue */}
+          <div className="border-t pt-6">
+            <ImageQueue
+              queuedImages={queuedImages}
+              onRemoveFromQueue={removeFromQueue}
+              onAddToQueue={addToQueue}
+              onStartQueue={handleStartQueue}
+              isProcessing={queuedImages.some(q => q.status === 'processing')}
+            />
+          </div>
 
           {/* Results Gallery */}
           <div className="border-t pt-6">

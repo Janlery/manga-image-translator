@@ -504,6 +504,7 @@ shared              以 API 模式运行
         "ctd",
         "craft",
         "paddle",
+        "ysgyolo",
         "none"
       ],
       "title": "Detector",

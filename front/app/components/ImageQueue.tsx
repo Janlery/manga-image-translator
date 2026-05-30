@@ -7,6 +7,7 @@ interface ImageQueueProps {
   queuedImages: QueuedImage[];
   onRemoveFromQueue: (id: string) => void;
   onAddToQueue: (files: File[]) => void;
+  onStartQueue: () => void;
   isProcessing: boolean;
 }
 
@@ -14,13 +15,13 @@ export const ImageQueue: React.FC<ImageQueueProps> = ({
   queuedImages,
   onRemoveFromQueue,
   onAddToQueue,
+  onStartQueue,
   isProcessing,
 }) => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length > 0) {
       onAddToQueue(files);
-      // Reset input value to allow selecting the same file again
       e.target.value = '';
     }
   };
@@ -33,17 +34,44 @@ export const ImageQueue: React.FC<ImageQueueProps> = ({
     }
   };
 
+  const queuedCount = queuedImages.filter(q => q.status === 'queued').length;
+  const finishedCount = queuedImages.filter(q => q.status === 'finished').length;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-gray-800">
           Translation Queue ({queuedImages.length})
         </h3>
-        {isProcessing && (
-          <span className="text-sm text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
-            Processing...
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {isProcessing && (
+            <span className="text-sm text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
+              Processing...
+            </span>
+          )}
+          {queuedCount > 0 && !isProcessing && (
+            <button
+              onClick={onStartQueue}
+              className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-1 text-sm transition-colors"
+            >
+              <Icon icon="carbon:play" className="w-4 h-4" />
+              Start Queue ({queuedCount})
+            </button>
+          )}
+          {finishedCount > 0 && !isProcessing && (
+            <button
+              onClick={() => {
+                queuedImages
+                  .filter(q => q.status === 'finished' || q.status === 'error')
+                  .forEach(q => onRemoveFromQueue(q.id));
+              }}
+              className="px-3 py-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg flex items-center gap-1 text-sm transition-colors"
+            >
+              <Icon icon="carbon:trash-can" className="w-4 h-4" />
+              Clear Finished
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Add images area - always visible */}
@@ -61,7 +89,7 @@ export const ImageQueue: React.FC<ImageQueueProps> = ({
               className="w-6 h-6 mx-auto text-gray-500 mb-2"
             />
             <div className="text-gray-600 text-sm">
-              {isProcessing 
+              {isProcessing
                 ? 'Add more images to queue while processing'
                 : 'Add images to queue'
               }
@@ -110,7 +138,7 @@ export const ImageQueue: React.FC<ImageQueueProps> = ({
               {/* Status */}
               <div className="flex items-center space-x-2">
                 <div className={`px-2 py-1 rounded-full text-xs font-medium ${
-                  queuedImage.status === 'queued' 
+                  queuedImage.status === 'queued'
                     ? 'bg-yellow-100 text-yellow-800'
                     : queuedImage.status === 'processing'
                     ? 'bg-blue-100 text-blue-800'
@@ -124,7 +152,7 @@ export const ImageQueue: React.FC<ImageQueueProps> = ({
                   {queuedImage.status === 'error' && 'Error'}
                 </div>
 
-                {/* Remove button - only show for queued items */}
+                {/* Remove button — only for queued items (not currently processing) */}
                 {queuedImage.status === 'queued' && (
                   <button
                     onClick={() => onRemoveFromQueue(queuedImage.id)}
@@ -141,4 +169,4 @@ export const ImageQueue: React.FC<ImageQueueProps> = ({
       )}
     </div>
   );
-}; 
+};
