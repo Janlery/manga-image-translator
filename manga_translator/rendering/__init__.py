@@ -1,4 +1,5 @@
 import os
+import math
 import cv2
 import numpy as np
 from typing import List
@@ -45,7 +46,7 @@ def count_text_length(text: str) -> float:
             length += 1.0
     return length
 
-def resize_regions_to_font_size(img: np.ndarray, text_regions: List['TextBlock'], font_size_fixed: int, font_size_offset: int, font_size_minimum: int):  
+def resize_regions_to_font_size(img: np.ndarray, text_regions: List['TextBlock'], font_size_fixed: int, font_size_offset: int, font_size_minimum: int, font_size_maximum: int = -1, font_size_compression: float = 0.3):  
     """
     Adjust text region size to accommodate font size and translated text length.
     
@@ -76,11 +77,23 @@ def resize_regions_to_font_size(img: np.ndarray, text_regions: List['TextBlock']
             original_region_font_size = font_size_minimum
 
         # Determine target font size
-        current_base_font_size = original_region_font_size  
-        if font_size_fixed is not None:  
-            target_font_size = font_size_fixed  
-        else:  
-            target_font_size = current_base_font_size + font_size_offset  
+        current_base_font_size = original_region_font_size
+        if font_size_fixed is not None:
+            target_font_size = font_size_fixed
+        else:
+            target_font_size = current_base_font_size + font_size_offset
+
+        # Track font size before compression (used later to scale dst_points)
+        target_before_compression = target_font_size
+
+        # Apply font size maximum with sub-linear compression
+        # Near-threshold fonts barely shrink, far-above fonts shrink dramatically
+        # Formula: target = max + excess^(1 - compression)
+        if font_size_maximum and font_size_maximum > 0 and target_font_size > font_size_maximum:
+            excess = target_font_size - font_size_maximum
+            power = max(0.1, 1.0 - font_size_compression)
+            target_font_size = font_size_maximum + int(excess ** power)
+            logger.info(f"Font size compressed: {target_before_compression}px -> {target_font_size}px (max={font_size_maximum}, compression={font_size_compression})")
 
         target_font_size = max(target_font_size, font_size_minimum, 1)  
         # print("-" * 50)
@@ -226,8 +239,20 @@ def resize_regions_to_font_size(img: np.ndarray, text_regions: List['TextBlock']
             else:
                 dst_points = region.min_rect
 
+        # Apply font size compression to dst_points if font was compressed
+        # This ensures the rendered text is actually smaller, not just blurry
+        if target_font_size < target_before_compression:
+            compression_ratio = target_font_size / target_before_compression
+            try:
+                poly = Polygon(dst_points[0])
+                poly = affinity.scale(poly, xfact=compression_ratio, yfact=compression_ratio, origin='center')
+                dst_points = np.array(poly.exterior.coords[:4]).reshape(-1, 4, 2).astype(np.int64)
+                logger.info(f"dst_points scaled: compression_ratio={compression_ratio:.2f}")
+            except Exception as e:
+                logger.error(f"Error scaling dst_points: {e}. Using original dst_points.")
+
         # Store results and update font size
-        dst_points_list.append(dst_points)  
+        dst_points_list.append(dst_points)
         region.font_size = int(target_font_size)
 
     return dst_points_list
@@ -239,6 +264,8 @@ async def dispatch(
     font_size_fixed: int = None,
     font_size_offset: int = 0,
     font_size_minimum: int = 0,
+    font_size_maximum: int = -1,
+    font_size_compression: float = 0.3,
     hyphenate: bool = True,
     render_mask: np.ndarray = None,
     line_spacing: int = None,
@@ -248,8 +275,11 @@ async def dispatch(
     text_render.set_font(font_path)
     text_regions = list(filter(lambda region: region.translation, text_regions))
 
+    if font_size_maximum and font_size_maximum > 0:
+        logger.info(f"Font size cap enabled: max={font_size_maximum}, compression={font_size_compression}")
+
     # Resize regions that are too small
-    dst_points_list = resize_regions_to_font_size(img, text_regions, font_size_fixed, font_size_offset, font_size_minimum)
+    dst_points_list = resize_regions_to_font_size(img, text_regions, font_size_fixed, font_size_offset, font_size_minimum, font_size_maximum, font_size_compression)
 
     # TODO: Maybe remove intersections
 
@@ -352,14 +382,13 @@ def render(
             w_ext = int((h * r_orig - w) // 2)  
             #print(f"Calculated w_ext = {w_ext}")  
             
-            if w_ext >= 0:  
-                #print(f"Creating new box with dimensions: {h}x{w + w_ext * 2}")  
-                box = np.zeros((h, w + w_ext * 2, 4), dtype=np.uint8)  
-                #print(f"Placing temp_box at position [:, :w] = [0:{h}, 0:{w}]")  
-         
-                # The line is full, and there should be no empty columns on the left side of the text. Otherwise, when multiple text boxes are aligned on the left, the translated text cannot be aligned. Common scenarios: borderless comics, comic postscript.  
-                # When there are bubbles on the current page, it can be changed to center: box[0:h, w_ext:w_ext+w] = temp_box, requiring more accurate bubble detection. But not changing it doesn't have much impact.
-                box[0:h, 0:w] = temp_box  
+            if w_ext >= 0:
+                #print(f"Creating new box with dimensions: {h}x{w + w_ext * 2}")
+                box = np.zeros((h, w + w_ext * 2, 4), dtype=np.uint8)
+                #print(f"Placing temp_box at position [:, w_ext:w_ext+w] = [0:{h}, {w_ext}:{w_ext+w}]")
+
+                # Center text horizontally within the padded box, matching target dst_points
+                box[0:h, w_ext:w_ext+w] = temp_box  
             else:  
                 #print("w_ext < 0, using original temp_box")  
                 box = temp_box.copy()  
@@ -371,26 +400,25 @@ def render(
             h_ext = int(w / (2 * r_orig) - h / 2) if r_orig > 0 else 0   
             #print(f"Calculated h_ext = {h_ext}")  
             
-            if h_ext >= 0:   
-                #print(f"Creating new box with dimensions: {h + h_ext * 2}x{w}")  
-                box = np.zeros((h + h_ext * 2, w, 4), dtype=np.uint8)  
-                #print(f"Placing temp_box at position [0:h, 0:w] = [0:{h}, 0:{w}]")  
-                # The rows are full, and there should be no empty lines above the text; otherwise, when multiple text boxes have their top edges aligned, the text cannot be aligned. Common scenario: borderless comics, CG. 
-                # When there are bubbles on the current page, it can be changed to center: box[h_ext:h_ext+h, 0:w] = temp_box, requiring more accurate bubble detection.
-                box[0:h, 0:w] = temp_box  
-            else:   
-                #print("h_ext < 0, using original temp_box")  
-                box = temp_box.copy()   
-        else:   
-            #print(f"Case: r_temp({r_temp}) <= r_orig({r_orig}) - Need horizontal padding")  
-            w_ext = int((h * r_orig - w) / 2)  
-            #print(f"Calculated w_ext = {w_ext}")  
-            
-            if w_ext >= 0:  
-                #print(f"Creating new box with dimensions: {h}x{w + w_ext * 2}")  
-                box = np.zeros((h, w + w_ext * 2, 4), dtype=np.uint8)  
-                #print(f"Placing temp_box at position [0:h, w_ext:w_ext+w] = [0:{h}, {w_ext}:{w_ext+w}]") 
-                # Rows are fully filled, columns are centered
+            if h_ext >= 0:
+                #print(f"Creating new box with dimensions: {h + h_ext * 2}x{w}")
+                box = np.zeros((h + h_ext * 2, w, 4), dtype=np.uint8)
+                #print(f"Placing temp_box at position [h_ext:h_ext+h, 0:w] = [{h_ext}:{h_ext+h}, 0:{w}]")
+                # Center text vertically within the padded box
+                box[h_ext:h_ext+h, 0:w] = temp_box
+            else:
+                #print("h_ext < 0, using original temp_box")
+                box = temp_box.copy()
+        else:
+            #print(f"Case: r_temp({r_temp}) <= r_orig({r_orig}) - Need horizontal padding")
+            w_ext = int((h * r_orig - w) / 2)
+            #print(f"Calculated w_ext = {w_ext}")
+
+            if w_ext >= 0:
+                #print(f"Creating new box with dimensions: {h}x{w + w_ext * 2}")
+                box = np.zeros((h, w + w_ext * 2, 4), dtype=np.uint8)
+                #print(f"Placing temp_box at position [0:h, w_ext:w_ext+w] = [0:{h}, {w_ext}:{w_ext+w}]")
+                # Center text horizontally within the padded box
                 box[0:h, w_ext:w_ext+w] = temp_box  
             else:   
                 #print("w_ext < 0, using original temp_box")  

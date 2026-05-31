@@ -1695,9 +1695,13 @@ class MangaTranslator:
             else:
                 output = await dispatch_eng_render(ctx.img_inpainted, ctx.img_rgb, ctx.text_regions, self.font_path, config.render.line_spacing)
         else:
+            logger.info(f"Render config: font_size={config.render.font_size}, offset={config.render.font_size_offset}, min={config.render.font_size_minimum}, max={config.render.font_size_maximum}, compression={config.render.font_size_compression}")
             output = await dispatch_rendering(ctx.img_inpainted, ctx.text_regions, self.font_path, config.render.font_size,
                                               config.render.font_size_offset,
-                                              config.render.font_size_minimum, not config.render.no_hyphenation, ctx.render_mask, config.render.line_spacing)
+                                              config.render.font_size_minimum,
+                                              config.render.font_size_maximum,
+                                              config.render.font_size_compression,
+                                              not config.render.no_hyphenation, ctx.render_mask, config.render.line_spacing)
         return output
 
     def _result_path(self, path: str) -> str:

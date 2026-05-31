@@ -105,6 +105,7 @@ export interface QueuedImage {
 }
 
 export interface TranslationSettings {
+  // Basic settings
   detectionResolution: string;
   textDetector: string;
   renderTextDirection: string;
@@ -115,6 +116,54 @@ export interface TranslationSettings {
   customBoxThreshold: number;
   maskDilationOffset: number;
   inpainter: string;
+
+  // Render settings
+  renderer: string;
+  alignment: string;
+  fontSize: number;
+  fontColor: string;
+  uppercase: boolean;
+  lowercase: boolean;
+  noHyphenation: boolean;
+  rtl: boolean;
+  lineSpacing: number;
+  fontSizeOffset: number;
+  fontSizeMaximum: number;
+  fontSizeCompression: number;
+  disableFontBorder: boolean;
+
+  // Translator advanced
+  noTextLangSkip: boolean;
+  filterText: string;
+
+  // Detector advanced
+  textThreshold: number;
+  detRotate: boolean;
+  detAutoRotate: boolean;
+  detInvert: boolean;
+  detGammaCorrect: boolean;
+
+  // OCR
+  ocr: string;
+  minTextLength: number;
+  ignoreBubble: number;
+
+  // Upscale
+  upscaler: string;
+  upscaleRatio: number;
+  revertUpscaling: boolean;
+
+  // Colorizer
+  colorizer: string;
+  colorizationSize: number;
+  denoiseSigma: number;
+
+  // Inpainter advanced
+  inpaintingPrecision: string;
+
+  // Global
+  kernelSize: number;
+  forceSimpleSort: boolean;
 }
 
 export interface FinishedImage {

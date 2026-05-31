@@ -45,6 +45,54 @@ export const App: React.FC = () => {
   const [maskDilationOffset, setMaskDilationOffset] = useState<number>(30);
   const [inpainter, setInpainter] = useState("default");
 
+  // Render settings
+  const [renderer, setRenderer] = useState("default");
+  const [alignment, setAlignment] = useState("auto");
+  const [fontSize, setFontSize] = useState<number>(-1);
+  const [fontColor, setFontColor] = useState("");
+  const [uppercase, setUppercase] = useState(false);
+  const [lowercase, setLowercase] = useState(false);
+  const [noHyphenation, setNoHyphenation] = useState(false);
+  const [rtl, setRtl] = useState(true);
+  const [lineSpacing, setLineSpacing] = useState<number>(0);
+  const [fontSizeOffset, setFontSizeOffset] = useState<number>(0);
+  const [fontSizeMaximum, setFontSizeMaximum] = useState<number>(-1);
+  const [fontSizeCompression, setFontSizeCompression] = useState<number>(0.3);
+  const [disableFontBorder, setDisableFontBorder] = useState(false);
+
+  // Translator advanced
+  const [noTextLangSkip, setNoTextLangSkip] = useState(false);
+  const [filterText, setFilterText] = useState("");
+
+  // Detector advanced
+  const [textThreshold, setTextThreshold] = useState<number>(0.5);
+  const [detRotate, setDetRotate] = useState(false);
+  const [detAutoRotate, setDetAutoRotate] = useState(false);
+  const [detInvert, setDetInvert] = useState(false);
+  const [detGammaCorrect, setDetGammaCorrect] = useState(false);
+
+  // OCR
+  const [ocr, setOcr] = useState("48px");
+  const [minTextLength, setMinTextLength] = useState<number>(0);
+  const [ignoreBubble, setIgnoreBubble] = useState<number>(0);
+
+  // Upscale
+  const [upscaler, setUpscaler] = useState("esrgan");
+  const [upscaleRatio, setUpscaleRatio] = useState<number>(0);
+  const [revertUpscaling, setRevertUpscaling] = useState(false);
+
+  // Colorizer
+  const [colorizer, setColorizer] = useState("none");
+  const [colorizationSize, setColorizationSize] = useState<number>(576);
+  const [denoiseSigma, setDenoiseSigma] = useState<number>(30);
+
+  // Inpainter advanced
+  const [inpaintingPrecision, setInpaintingPrecision] = useState("bf16");
+
+  // Global
+  const [kernelSize, setKernelSize] = useState<number>(3);
+  const [forceSimpleSort, setForceSimpleSort] = useState(false);
+
   // Computed State (useMemo)
   const isProcessing = useMemo(() => {
     // If there are no files or no statuses, we're not processing
@@ -78,10 +126,42 @@ export const App: React.FC = () => {
     if (savedSettings.translator) setTranslator(savedSettings.translator);
     if (savedSettings.targetLanguage) setTargetLanguage(savedSettings.targetLanguage);
     if (savedSettings.inpaintingSize) setInpaintingSize(savedSettings.inpaintingSize);
-    if (savedSettings.customUnclipRatio) setCustomUnclipRatio(savedSettings.customUnclipRatio);
-    if (savedSettings.customBoxThreshold) setCustomBoxThreshold(savedSettings.customBoxThreshold);
-    if (savedSettings.maskDilationOffset) setMaskDilationOffset(savedSettings.maskDilationOffset);
+    if (savedSettings.customUnclipRatio != null) setCustomUnclipRatio(savedSettings.customUnclipRatio);
+    if (savedSettings.customBoxThreshold != null) setCustomBoxThreshold(savedSettings.customBoxThreshold);
+    if (savedSettings.maskDilationOffset != null) setMaskDilationOffset(savedSettings.maskDilationOffset);
     if (savedSettings.inpainter) setInpainter(savedSettings.inpainter);
+    if (savedSettings.renderer) setRenderer(savedSettings.renderer);
+    if (savedSettings.alignment) setAlignment(savedSettings.alignment);
+    if (savedSettings.fontSize != null) setFontSize(savedSettings.fontSize);
+    if (savedSettings.fontColor != null) setFontColor(savedSettings.fontColor);
+    if (savedSettings.uppercase != null) setUppercase(savedSettings.uppercase);
+    if (savedSettings.lowercase != null) setLowercase(savedSettings.lowercase);
+    if (savedSettings.noHyphenation != null) setNoHyphenation(savedSettings.noHyphenation);
+    if (savedSettings.rtl != null) setRtl(savedSettings.rtl);
+    if (savedSettings.lineSpacing != null) setLineSpacing(savedSettings.lineSpacing);
+    if (savedSettings.fontSizeOffset != null) setFontSizeOffset(savedSettings.fontSizeOffset);
+    if (savedSettings.fontSizeMaximum != null) setFontSizeMaximum(savedSettings.fontSizeMaximum);
+    if (savedSettings.fontSizeCompression != null) setFontSizeCompression(savedSettings.fontSizeCompression);
+    if (savedSettings.disableFontBorder != null) setDisableFontBorder(savedSettings.disableFontBorder);
+    if (savedSettings.noTextLangSkip != null) setNoTextLangSkip(savedSettings.noTextLangSkip);
+    if (savedSettings.filterText != null) setFilterText(savedSettings.filterText);
+    if (savedSettings.textThreshold != null) setTextThreshold(savedSettings.textThreshold);
+    if (savedSettings.detRotate != null) setDetRotate(savedSettings.detRotate);
+    if (savedSettings.detAutoRotate != null) setDetAutoRotate(savedSettings.detAutoRotate);
+    if (savedSettings.detInvert != null) setDetInvert(savedSettings.detInvert);
+    if (savedSettings.detGammaCorrect != null) setDetGammaCorrect(savedSettings.detGammaCorrect);
+    if (savedSettings.ocr) setOcr(savedSettings.ocr);
+    if (savedSettings.minTextLength != null) setMinTextLength(savedSettings.minTextLength);
+    if (savedSettings.ignoreBubble != null) setIgnoreBubble(savedSettings.ignoreBubble);
+    if (savedSettings.upscaler) setUpscaler(savedSettings.upscaler);
+    if (savedSettings.upscaleRatio != null) setUpscaleRatio(savedSettings.upscaleRatio);
+    if (savedSettings.revertUpscaling != null) setRevertUpscaling(savedSettings.revertUpscaling);
+    if (savedSettings.colorizer) setColorizer(savedSettings.colorizer);
+    if (savedSettings.colorizationSize != null) setColorizationSize(savedSettings.colorizationSize);
+    if (savedSettings.denoiseSigma != null) setDenoiseSigma(savedSettings.denoiseSigma);
+    if (savedSettings.inpaintingPrecision) setInpaintingPrecision(savedSettings.inpaintingPrecision);
+    if (savedSettings.kernelSize != null) setKernelSize(savedSettings.kernelSize);
+    if (savedSettings.forceSimpleSort != null) setForceSimpleSort(savedSettings.forceSimpleSort);
 
     const savedFinishedImages = loadFinishedImages();
     setFinishedImages(savedFinishedImages);
@@ -100,6 +180,38 @@ export const App: React.FC = () => {
       customBoxThreshold,
       maskDilationOffset,
       inpainter,
+      renderer,
+      alignment,
+      fontSize,
+      fontColor,
+      uppercase,
+      lowercase,
+      noHyphenation,
+      rtl,
+      lineSpacing,
+      fontSizeOffset,
+      fontSizeMaximum,
+      fontSizeCompression,
+      disableFontBorder,
+      noTextLangSkip,
+      filterText,
+      textThreshold,
+      detRotate,
+      detAutoRotate,
+      detInvert,
+      detGammaCorrect,
+      ocr,
+      minTextLength,
+      ignoreBubble,
+      upscaler,
+      upscaleRatio,
+      revertUpscaling,
+      colorizer,
+      colorizationSize,
+      denoiseSigma,
+      inpaintingPrecision,
+      kernelSize,
+      forceSimpleSort,
     };
     saveSettings(settings);
   }, [
@@ -113,6 +225,38 @@ export const App: React.FC = () => {
     customBoxThreshold,
     maskDilationOffset,
     inpainter,
+    renderer,
+    alignment,
+    fontSize,
+    fontColor,
+    uppercase,
+    lowercase,
+    noHyphenation,
+    rtl,
+    lineSpacing,
+    fontSizeOffset,
+    fontSizeMaximum,
+    fontSizeCompression,
+    disableFontBorder,
+    noTextLangSkip,
+    filterText,
+    textThreshold,
+    detRotate,
+    detAutoRotate,
+    detInvert,
+    detGammaCorrect,
+    ocr,
+    minTextLength,
+    ignoreBubble,
+    upscaler,
+    upscaleRatio,
+    revertUpscaling,
+    colorizer,
+    colorizationSize,
+    denoiseSigma,
+    inpaintingPrecision,
+    kernelSize,
+    forceSimpleSort,
   ]);
 
   /** クリップボード ペースト対応 */
@@ -150,6 +294,12 @@ export const App: React.FC = () => {
         detectionResolution, textDetector, renderTextDirection,
         translator, targetLanguage, inpaintingSize, customUnclipRatio,
         customBoxThreshold, maskDilationOffset, inpainter,
+        renderer, alignment, fontSize, fontColor, uppercase, lowercase,
+        noHyphenation, rtl, lineSpacing, fontSizeOffset, fontSizeMaximum, fontSizeCompression, disableFontBorder,
+        noTextLangSkip, filterText, textThreshold, detRotate, detAutoRotate,
+        detInvert, detGammaCorrect, ocr, minTextLength, ignoreBubble,
+        upscaler, upscaleRatio, revertUpscaling, colorizer, colorizationSize,
+        denoiseSigma, inpaintingPrecision, kernelSize, forceSimpleSort,
       } as TranslationSettings,
     };
 
@@ -331,19 +481,57 @@ export const App: React.FC = () => {
         detection_size: detectionResolution,
         box_threshold: customBoxThreshold,
         unclip_ratio: customUnclipRatio,
+        text_threshold: textThreshold,
+        det_rotate: detRotate,
+        det_auto_rotate: detAutoRotate,
+        det_invert: detInvert,
+        det_gamma_correct: detGammaCorrect,
       },
       render: {
+        renderer: renderer,
+        alignment: alignment,
         direction: renderTextDirection,
+        uppercase: uppercase,
+        lowercase: lowercase,
+        no_hyphenation: noHyphenation,
+        font_color: fontColor || undefined,
+        line_spacing: lineSpacing || undefined,
+        font_size: fontSize >= 0 ? fontSize : undefined,
+        font_size_offset: fontSizeOffset,
+        font_size_maximum: fontSizeMaximum,
+        font_size_compression: fontSizeCompression,
+        disable_font_border: disableFontBorder,
+        rtl: rtl,
       },
       translator: {
         translator: translator,
         target_lang: targetLanguage,
+        no_text_lang_skip: noTextLangSkip,
       },
       inpainter: {
         inpainter: inpainter,
         inpainting_size: inpaintingSize,
+        inpainting_precision: inpaintingPrecision,
+      },
+      ocr: {
+        ocr: ocr,
+        min_text_length: minTextLength,
+        ignore_bubble: ignoreBubble,
+      },
+      upscale: {
+        upscaler: upscaler,
+        upscale_ratio: upscaleRatio > 0 ? upscaleRatio : undefined,
+        revert_upscaling: revertUpscaling,
+      },
+      colorizer: {
+        colorizer: colorizer,
+        colorization_size: colorizationSize,
+        denoise_sigma: denoiseSigma,
       },
       mask_dilation_offset: maskDilationOffset,
+      filter_text: filterText || undefined,
+      kernel_size: kernelSize,
+      force_simple_sort: forceSimpleSort,
     });
   };
 
@@ -511,6 +699,38 @@ export const App: React.FC = () => {
           customBoxThreshold,
           maskDilationOffset,
           inpainter,
+          renderer,
+          alignment,
+          fontSize,
+          fontColor,
+          uppercase,
+          lowercase,
+          noHyphenation,
+          rtl,
+          lineSpacing,
+          fontSizeOffset,
+          fontSizeMaximum,
+          fontSizeCompression,
+          disableFontBorder,
+          noTextLangSkip,
+          filterText,
+          textThreshold,
+          detRotate,
+          detAutoRotate,
+          detInvert,
+          detGammaCorrect,
+          ocr,
+          minTextLength,
+          ignoreBubble,
+          upscaler,
+          upscaleRatio,
+          revertUpscaling,
+          colorizer,
+          colorizationSize,
+          denoiseSigma,
+          inpaintingPrecision,
+          kernelSize,
+          forceSimpleSort,
         };
         
         const finishedImage: FinishedImage = {
@@ -568,6 +788,38 @@ export const App: React.FC = () => {
             customBoxThreshold={customBoxThreshold}
             maskDilationOffset={maskDilationOffset}
             inpainter={inpainter}
+            renderer={renderer}
+            alignment={alignment}
+            fontSize={fontSize}
+            fontColor={fontColor}
+            uppercase={uppercase}
+            lowercase={lowercase}
+            noHyphenation={noHyphenation}
+            rtl={rtl}
+            lineSpacing={lineSpacing}
+            fontSizeOffset={fontSizeOffset}
+            fontSizeMaximum={fontSizeMaximum}
+            fontSizeCompression={fontSizeCompression}
+            disableFontBorder={disableFontBorder}
+            noTextLangSkip={noTextLangSkip}
+            filterText={filterText}
+            textThreshold={textThreshold}
+            detRotate={detRotate}
+            detAutoRotate={detAutoRotate}
+            detInvert={detInvert}
+            detGammaCorrect={detGammaCorrect}
+            ocr={ocr}
+            minTextLength={minTextLength}
+            ignoreBubble={ignoreBubble}
+            upscaler={upscaler}
+            upscaleRatio={upscaleRatio}
+            revertUpscaling={revertUpscaling}
+            colorizer={colorizer}
+            colorizationSize={colorizationSize}
+            denoiseSigma={denoiseSigma}
+            inpaintingPrecision={inpaintingPrecision}
+            kernelSize={kernelSize}
+            forceSimpleSort={forceSimpleSort}
             setDetectionResolution={setDetectionResolution}
             setTextDetector={setTextDetector}
             setRenderTextDirection={setRenderTextDirection}
@@ -578,6 +830,38 @@ export const App: React.FC = () => {
             setCustomBoxThreshold={setCustomBoxThreshold}
             setMaskDilationOffset={setMaskDilationOffset}
             setInpainter={setInpainter}
+            setRenderer={setRenderer}
+            setAlignment={setAlignment}
+            setFontSize={setFontSize}
+            setFontColor={setFontColor}
+            setUppercase={setUppercase}
+            setLowercase={setLowercase}
+            setNoHyphenation={setNoHyphenation}
+            setRtl={setRtl}
+            setLineSpacing={setLineSpacing}
+            setFontSizeOffset={setFontSizeOffset}
+            setFontSizeMaximum={setFontSizeMaximum}
+            setFontSizeCompression={setFontSizeCompression}
+            setDisableFontBorder={setDisableFontBorder}
+            setNoTextLangSkip={setNoTextLangSkip}
+            setFilterText={setFilterText}
+            setTextThreshold={setTextThreshold}
+            setDetRotate={setDetRotate}
+            setDetAutoRotate={setDetAutoRotate}
+            setDetInvert={setDetInvert}
+            setDetGammaCorrect={setDetGammaCorrect}
+            setOcr={setOcr}
+            setMinTextLength={setMinTextLength}
+            setIgnoreBubble={setIgnoreBubble}
+            setUpscaler={setUpscaler}
+            setUpscaleRatio={setUpscaleRatio}
+            setRevertUpscaling={setRevertUpscaling}
+            setColorizer={setColorizer}
+            setColorizationSize={setColorizationSize}
+            setDenoiseSigma={setDenoiseSigma}
+            setInpaintingPrecision={setInpaintingPrecision}
+            setKernelSize={setKernelSize}
+            setForceSimpleSort={setForceSimpleSort}
           />
 
           {/* Main Image Handling Area */}

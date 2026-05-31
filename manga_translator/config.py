@@ -163,6 +163,10 @@ class RenderConfig(BaseModel):
     """Offset font size by a given amount, positive number increase font size and vice versa"""
     font_size_minimum: int = -1
     """Minimum output font size. Default is image_sides_sum/200"""
+    font_size_maximum: Optional[int] = -1
+    """Maximum output font size. -1 = disabled. If set > 0, fonts exceeding this will be compressed using font_size_compression ratio"""
+    font_size_compression: float = 0.3
+    """Compression ratio for fonts exceeding font_size_maximum (0-1). Lower = more compression. Default 0.5"""
     direction: Direction = Direction.auto
     """Force text to be rendered horizontally/vertically/none"""
     uppercase: bool = False
