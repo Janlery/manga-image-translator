@@ -1397,7 +1397,7 @@ class MangaTranslator:
             for region in ctx.text_regions:  
                 region.translation = ""  # 空翻译将创建空白区域 / Empty translation will create blank areas  
                 region.target_lang = config.translator.target_lang  
-                region._alignment = config.render.alignment  
+                region._alignment = config.render.alignment
                 region._direction = config.render.direction    
             return ctx.text_regions  
 
@@ -1439,7 +1439,7 @@ class MangaTranslator:
                     translation = translation.lower()  # 修正：应该是lower而不是upper  
                 region.translation = translation  
                 region.target_lang = config.translator.target_lang  
-                region._alignment = config.render.alignment  
+                region._alignment = config.render.alignment
                 region._direction = config.render.direction  
 
         # Punctuation correction logic. for translators often incorrectly change quotation marks from the source language to those commonly used in the target language.

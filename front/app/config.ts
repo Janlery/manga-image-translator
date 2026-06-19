@@ -71,6 +71,7 @@ export const alignmentOptions = [
   { value: "right", label: "Right" },
 ];
 
+
 export const ocrOptions = [
   { value: "32px", label: "32px" },
   { value: "48px", label: "48px" },

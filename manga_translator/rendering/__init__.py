@@ -118,11 +118,11 @@ def resize_regions_to_font_size(img: np.ndarray, text_regions: List['TextBlock']
             # logger.debug(f"Needed rows: {needed_rows}")                
 
             if needed_rows > used_rows:
-                scale_x = ((needed_rows - used_rows) / used_rows) * 1 + 1
+                scale_y = ((needed_rows - used_rows) / used_rows) * 1 + 1
                 try:  
                     poly = Polygon(region.unrotated_min_rect[0])
                     minx, miny, maxx, maxy = poly.bounds
-                    poly = affinity.scale(poly, xfact=scale_x, yfact=1.0, origin=(minx, miny))        
+                    poly = affinity.scale(poly, xfact=1.0, yfact=scale_y, origin=(minx, miny))        
                 
                     pts = np.array(poly.exterior.coords[:4])  
                     dst_points = rotate_polygons(  
@@ -155,7 +155,7 @@ def resize_regions_to_font_size(img: np.ndarray, text_regions: List['TextBlock']
                 try:  
                     poly = Polygon(region.unrotated_min_rect[0])
                     minx, miny, maxx, maxy = poly.bounds
-                    poly = affinity.scale(poly, xfact=1.0, yfact=scale_x, origin=(minx, miny))                    
+                    poly = affinity.scale(poly, xfact=scale_x, yfact=1.0, origin='center')                    
                     
                     pts = np.array(poly.exterior.coords[:4])  
                     dst_points = rotate_polygons(  
@@ -360,74 +360,50 @@ def render(
     #print(f"Target language: {region.target_lang}")      
     #print(f"Region horizontal: {region.horizontal}")  
     #print(f"Starting image adjustment: r_temp={r_temp}, r_orig={r_orig}, h={h}, w={w}")  
-    if region.horizontal:  
-        #print("Processing HORIZONTAL region")  
-        
-        if r_temp > r_orig:   
-            #print(f"Case: r_temp({r_temp}) > r_orig({r_orig}) - Need vertical padding")  
-            h_ext = int((w / r_orig - h) // 2) if r_orig > 0 else 0  
-            #print(f"Calculated h_ext = {h_ext}")  
-            
-            if h_ext >= 0:  
-                #print(f"Creating new box with dimensions: {h + h_ext * 2}x{w}")  
-                box = np.zeros((h + h_ext * 2, w, 4), dtype=np.uint8)  
-                #print(f"Placing temp_box at position [h_ext:h_ext+h, :w] = [{h_ext}:{h_ext+h}, 0:{w}]")  
-                # Columns fully filled, rows centered
-                box[h_ext:h_ext+h, 0:w] = temp_box  
-            else:  
-                #print("h_ext < 0, using original temp_box")  
-                box = temp_box.copy()  
-        else:   
-            #print(f"Case: r_temp({r_temp}) <= r_orig({r_orig}) - Need horizontal padding")  
-            w_ext = int((h * r_orig - w) // 2)  
-            #print(f"Calculated w_ext = {w_ext}")  
-            
-            if w_ext >= 0:
-                #print(f"Creating new box with dimensions: {h}x{w + w_ext * 2}")
-                box = np.zeros((h, w + w_ext * 2, 4), dtype=np.uint8)
-                #print(f"Placing temp_box at position [:, w_ext:w_ext+w] = [0:{h}, {w_ext}:{w_ext+w}]")
+    if region.horizontal:
+        #print("Processing HORIZONTAL region")
 
-                # Center text horizontally within the padded box, matching target dst_points
-                box[0:h, w_ext:w_ext+w] = temp_box  
-            else:  
-                #print("w_ext < 0, using original temp_box")  
-                box = temp_box.copy()  
-    else:  
-        #print("Processing VERTICAL region")  
-        
-        if r_temp > r_orig:   
-            #print(f"Case: r_temp({r_temp}) > r_orig({r_orig}) - Need vertical padding")  
-            h_ext = int(w / (2 * r_orig) - h / 2) if r_orig > 0 else 0   
-            #print(f"Calculated h_ext = {h_ext}")  
-            
+        if r_temp > r_orig:
+            #print(f"Case: r_temp({r_temp}) > r_orig({r_orig}) - Need vertical padding")
+            h_ext = int((w / r_orig - h) // 2) if r_orig > 0 else 0
+            #print(f"Calculated h_ext = {h_ext}")
+
             if h_ext >= 0:
-                #print(f"Creating new box with dimensions: {h + h_ext * 2}x{w}")
                 box = np.zeros((h + h_ext * 2, w, 4), dtype=np.uint8)
-                #print(f"Placing temp_box at position [h_ext:h_ext+h, 0:w] = [{h_ext}:{h_ext+h}, 0:{w}]")
-                # Center text vertically within the padded box
                 box[h_ext:h_ext+h, 0:w] = temp_box
             else:
-                #print("h_ext < 0, using original temp_box")
                 box = temp_box.copy()
         else:
             #print(f"Case: r_temp({r_temp}) <= r_orig({r_orig}) - Need horizontal padding")
-            w_ext = int((h * r_orig - w) / 2)
+            w_ext = int((h * r_orig - w) // 2)
             #print(f"Calculated w_ext = {w_ext}")
 
             if w_ext >= 0:
-                #print(f"Creating new box with dimensions: {h}x{w + w_ext * 2}")
                 box = np.zeros((h, w + w_ext * 2, 4), dtype=np.uint8)
-                #print(f"Placing temp_box at position [0:h, w_ext:w_ext+w] = [0:{h}, {w_ext}:{w_ext+w}]")
-                # Center text horizontally within the padded box
-                box[0:h, w_ext:w_ext+w] = temp_box  
-            else:   
-                #print("w_ext < 0, using original temp_box")  
-                box = temp_box.copy()   
-    #print(f"Final box dimensions: {box.shape if box is not None else 'None'}")  
+                box[0:h, w_ext:w_ext+w] = temp_box
+            else:
+                box = temp_box.copy()
+    else:
+        #print("Processing VERTICAL region")
+
+        if r_temp > r_orig:
+            h_ext = int(w / (2 * r_orig) - h / 2) if r_orig > 0 else 0
+
+            if h_ext >= 0:
+                box = np.zeros((h + h_ext * 2, w, 4), dtype=np.uint8)
+                box[h_ext:h_ext+h, 0:w] = temp_box
+            else:
+                box = temp_box.copy()
+        else:
+            w_ext = int((h * r_orig - w) / 2)
+
+            if w_ext >= 0:
+                box = np.zeros((h, w + w_ext * 2, 4), dtype=np.uint8)
+                box[0:h, w_ext:w_ext+w] = temp_box
+            else:
+                box = temp_box.copy()
 
     src_points = np.array([[0, 0], [box.shape[1], 0], [box.shape[1], box.shape[0]], [0, box.shape[0]]]).astype(np.float32)
-    #src_pts[:, 0] = np.clip(np.round(src_pts[:, 0]), 0, enlarged_w * 2)
-    #src_pts[:, 1] = np.clip(np.round(src_pts[:, 1]), 0, enlarged_h * 2)
 
     M, _ = cv2.findHomography(src_points, dst_points, cv2.RANSAC, 5.0)
     rgba_region = cv2.warpPerspective(box, M, (img.shape[1], img.shape[0]), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
