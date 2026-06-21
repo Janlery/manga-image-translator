@@ -107,7 +107,7 @@ def split_text_region(
 #     box = np.array(box)
 #     return box
 
-def merge_bboxes_text_region(bboxes: List[Quadrilateral], width, height):
+def merge_bboxes_text_region(bboxes: List[Quadrilateral], width, height, edge_ratio_threshold: float = 0.0):
     # step 0: merge quadrilaterals that belong to the same textline
     # u = 0
     # removed_counter = 0
@@ -129,11 +129,48 @@ def merge_bboxes_text_region(bboxes: List[Quadrilateral], width, height):
     for i, box in enumerate(bboxes):
         G.add_node(i, box=box)
 
+    # 记录边缘距离
+    edge_distances = {}
     for ((u, ubox), (v, vbox)) in itertools.combinations(enumerate(bboxes), 2):
         # if quadrilateral_can_merge_region_coarse(ubox, vbox):
-        if quadrilateral_can_merge_region(ubox, vbox, aspect_ratio_tol=1.3, font_size_ratio_tol=2,
-                                          char_gap_tolerance=1, char_gap_tolerance2=3):
-            G.add_edge(u, v)
+        can_merge = quadrilateral_can_merge_region(ubox, vbox, aspect_ratio_tol=1.3, font_size_ratio_tol=2,
+                                          char_gap_tolerance=1, char_gap_tolerance2=3)
+        if can_merge:
+            # 计算边缘距离
+            poly_dist = ubox.poly_distance(vbox)
+            G.add_edge(u, v, distance=poly_dist)
+            edge_distances[(u, v)] = poly_dist
+
+    # step 1.5: 边缘距离比例检测 - 断开距离差异过大的连接
+    if edge_ratio_threshold > 0 and len(bboxes) > 2:
+        edges_to_remove = []
+        for node in G.nodes():
+            neighbors = list(G.neighbors(node))
+            if len(neighbors) >= 2:
+                # 获取该节点到所有邻居的距离
+                neighbor_distances = []
+                for neighbor in neighbors:
+                    edge = (min(node, neighbor), max(node, neighbor))
+                    dist = edge_distances.get(edge, 0)
+                    neighbor_distances.append((neighbor, dist))
+
+                # 按距离排序
+                neighbor_distances.sort(key=lambda x: x[1])
+
+                # 检查最小距离和其他距离的比例
+                min_dist = neighbor_distances[0][1]
+                if min_dist > 0:  # 避免除以0
+                    for neighbor, dist in neighbor_distances[1:]:
+                        ratio = dist / min_dist
+                        if ratio > edge_ratio_threshold:
+                            edge_to_remove = (min(node, neighbor), max(node, neighbor))
+                            if edge_to_remove not in edges_to_remove:
+                                edges_to_remove.append(edge_to_remove)
+
+        # 移除边
+        for edge in edges_to_remove:
+            if G.has_edge(edge[0], edge[1]):
+                G.remove_edge(edge[0], edge[1])
 
     # step 2: postprocess - further split each region
     region_indices: List[Set[int]] = []
@@ -181,7 +218,7 @@ def merge_bboxes_text_region(bboxes: List[Quadrilateral], width, height):
         # yield overall bbox and sorted indices
         yield txtlns, (fg_r, fg_g, fg_b), (bg_r, bg_g, bg_b)
 
-async def dispatch(textlines: List[Quadrilateral], width: int, height: int, verbose: bool = False) -> List[TextBlock]:
+async def dispatch(textlines: List[Quadrilateral], width: int, height: int, verbose: bool = False, config=None) -> List[TextBlock]:
     # print(width, height)
     # import re
     # for l in textlines:
@@ -189,16 +226,29 @@ async def dispatch(textlines: List[Quadrilateral], width: int, height: int, verb
     #     s = re.sub(r'([\d\]]) ', r'\1, ', s.replace('\n ', ', ')).replace(']]', ']],')
     #     print(s)
 
+    # 获取边缘距离比例阈值
+    edge_ratio_threshold = 0.0
+    if config is not None:
+        ocr_config = getattr(config, 'ocr', None)
+        if ocr_config is not None:
+            edge_ratio_threshold = getattr(ocr_config, 'merge_edge_ratio_threshold', 0.0)
+
     text_regions: List[TextBlock] = []
-    for (txtlns, fg_color, bg_color) in merge_bboxes_text_region(textlines, width, height):
+    for (txtlns, fg_color, bg_color) in merge_bboxes_text_region(textlines, width, height, edge_ratio_threshold=edge_ratio_threshold):
         total_logprobs = 0
         for txtln in txtlns:
             total_logprobs += np.log(txtln.prob) * txtln.area
-        total_logprobs /= sum([txtln.area for txtln in textlines])
+        total_area = sum([txtln.area for txtln in txtlns])
+        if total_area > 0:
+            total_logprobs /= total_area
+        else:
+            total_logprobs = 0
 
         font_size = int(min([txtln.font_size for txtln in txtlns]))
         angle = np.rad2deg(np.mean([txtln.angle for txtln in txtlns])) - 90
-        if abs(angle) < 3:
+        original_angles_deg = [np.rad2deg(txtln.angle) for txtln in txtlns]
+        has_near_90_degree = any(abs(orig_angle - 90.0) <= 1.0 for orig_angle in original_angles_deg)
+        if has_near_90_degree or abs(angle) < 3:
             angle = 0
         lines = [txtln.pts for txtln in txtlns]
         texts = [txtln.text for txtln in txtlns]

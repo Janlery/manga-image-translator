@@ -320,6 +320,8 @@ class OcrConfig(BaseModel):
     """The threshold for ignoring text in non bubble areas, with valid values ranging from 1 to 50, does not ignore others. Recommendation 5 to 10. If it is too low, normal bubble areas may be ignored, and if it is too large, non bubble areas may be considered normal bubbles"""
     prob: float | None = None
     """Minimum probability of a text region to be considered valid. If None, uses the model default."""
+    merge_edge_ratio_threshold: float = 0.0
+    """If a box has two neighbors with edge distance ratio > this value, disconnect the larger distance edge. 0 means disabled."""
 
 class Config(BaseModel):
     # General

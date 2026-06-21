@@ -90,8 +90,14 @@ class DefaultDetector(OfflineDetector):
         mask_resized = cv2.resize(mask, (mask.shape[1] * 2, mask.shape[0] * 2), interpolation=cv2.INTER_LINEAR)
         if pad_h > 0:
             mask_resized = mask_resized[:-pad_h, :]
-        elif pad_w > 0:
+        if pad_w > 0:
             mask_resized = mask_resized[:, :-pad_w]
+
+        # 将mask缩放回原图尺寸，与textlines坐标系统保持一致
+        original_h, original_w = image.shape[:2]
+        if mask_resized.shape[0] != original_h or mask_resized.shape[1] != original_w:
+            mask_resized = cv2.resize(mask_resized, (original_w, original_h), interpolation=cv2.INTER_LINEAR)
+
         raw_mask = np.clip(mask_resized * 255, 0, 255).astype(np.uint8)
 
         # if verbose:

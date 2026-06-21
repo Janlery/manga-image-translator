@@ -1093,7 +1093,7 @@ class MangaTranslator:
         current_time = time.time()
         self._model_usage_timestamps[("textline_merge", "textline_merge")] = current_time
         text_regions = await dispatch_textline_merge(ctx.textlines, ctx.img_rgb.shape[1], ctx.img_rgb.shape[0],
-                                                     verbose=self.verbose)
+                                                     verbose=self.verbose, config=config)
         for region in text_regions:
             if not hasattr(region, "text_raw"):
                 region.text_raw = region.text      # <- Save the initial OCR results to expand the render detection box. Also, prevent affecting the forbidden translation function.       
@@ -1121,7 +1121,7 @@ class MangaTranslator:
             ctx.textlines = filtered_textlines  
     
         text_regions = await dispatch_textline_merge(ctx.textlines, ctx.img_rgb.shape[1], ctx.img_rgb.shape[0],  
-                                                     verbose=self.verbose)  
+                                                     verbose=self.verbose, config=config)  
 
         new_text_regions = []
         for region in text_regions:
